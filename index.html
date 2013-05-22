@@ -1,0 +1,231 @@
+<!doctype html>
+<html>
+  <head>
+    <script src="jquery.min.js"></script>
+    <script src="two.min.js"></script>
+    <title>dunno wat do</title>
+    <audio autoplay loop id="bg">
+      <source src="bg.mp3" /> <!-- Shatter boss battle -->
+    </audio>
+    <style>
+      body {
+        color: white;
+        background-image: url(bg.jpg);
+        cursor: none;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      var Key = { 'm' : 77, 'esc' : 27 };
+      
+      Two.Polygon.prototype.destroy = function() {
+        this.scale = 0;
+      }
+      
+      Two.Polygon.prototype.isAlive = function() {
+        return this.scale != 0;
+      }
+      
+      Two.Polygon.prototype.collide = function(wat) {
+        return this.translation.distanceTo(wat.translation) <= 70;
+      }
+      
+      Array.prototype.clear = function() {
+        for(var i = 0; i < this.length; ++i)
+          if(!this[i].isAlive())
+            this.splice(i--, 1);
+            
+        return this;
+      }
+      
+      function makeEnemy() {
+        var min = 67;
+        var max = screen.height - 300;
+        var y = Math.floor(Math.random() * max) + min;
+        
+        var enemy = two.makeRectangle(screen.width, y, 70, 70);        
+        enemy.fill = 'red';
+        enemy.opacity = 0.75;
+        enemy.noStroke();
+        
+        return enemy;
+      }
+      
+      function getURLParameter(param) {
+        var sPageURL = window.location.search.substring(1);
+        var sURLVariables = sPageURL.split('&');
+        for(var i = 0, length = sURLVariables.length; i < length; ++i) {
+          var sParameterName = sURLVariables[i].split('=');
+          if(sParameterName[0] == param) 
+            return sParameterName[1];
+        }
+      }
+    </script>
+    
+    <script>
+      /*
+      TODO:
+        Images instead of polygons
+        Delay between shots
+        Why not Two.Groups?
+      */
+      
+      var params = { width: 285, height: 200, fullscreen: true, autostart: true };
+      var two = new Two(params).appendTo(document.body);
+
+      /* Make the player */
+      var player = two.makeRectangle(50, 100, 100, 100);
+      player.fill = 'rgb(0, 200, 255)';
+      player.opacity = 0.75;
+      player.noStroke();
+      
+      var enemies = [];      
+      var shots   = [];
+      
+      var shotSpeed  = /*getURLParameter('shotspeed')  || */15; // speed of your shots
+      var enemySpeed = getURLParameter('enemyspeed') || 5;      // speed of enemies
+      
+      var enemiesOnField  = 0;
+      var maxEnemyOnField = getURLParameter('enemies') || 5; // number of enemies in the screen
+      
+      var pntDeath = 1;  // point you win killing an enemy
+      var pntDead  = 10; // point you lose if an enemy kills you
+      
+      var pause = false;
+      
+      two.bind('update', function(frame) {
+        $('#two-1').css('color', 'red');
+        enemies = enemies.clear();
+        shots   = shots.clear();
+      
+        /* Shots movement */
+        for(var i = 0, length = shots.length; i < length; ++i) {
+          if(shots[i].translation.x > screen.width) // out of screen
+            shots[i].destroy();
+          
+          if(shots[i].isAlive())
+            shots[i].translation.x += shotSpeed;
+        }
+        
+        /* Enemies movement */
+        for(var i = 0, length = enemies.length; i < length; ++i) {
+          if(!enemies[i].isAlive())
+            continue;
+
+          if(enemies[i].translation.x > 0) { // if enemy is in the game
+            enemies[i].translation.x -= enemySpeed;
+            
+            /* If collision detected so game over */
+            if(enemies[i].collide(player)) {
+              $('#score').html(parseInt($('#score').text()) - pntDead);
+              enemies[i].destroy();
+              --enemiesOnField;
+            }
+          }
+          else { // out of screen
+            enemies[i].destroy();
+            --enemiesOnField;
+          }
+          
+          /* If shot collides with one or more enemies */
+          for(j = 0, jlength = shots.length; j < jlength; ++j)
+            if(enemies[i].collide(shots[j])) {
+              $('#score').html(parseInt($('#score').text()) + pntDeath);
+              enemies[i].destroy();
+              --enemiesOnField;
+            }
+            
+        }
+        
+        if(enemiesOnField >= maxEnemyOnField)
+          return; // unnecessary to make new enemies
+        
+        /* Enemy making */
+        var enemy = makeEnemy();
+        var isCollided = false;
+        
+        do {
+          for(var i = 0, length = enemies.length; i < length; ++i) {
+            if(enemies[i].collide(enemy)) {
+              enemy.destroy();
+              enemy = makeEnemy();
+              isCollided = true;
+              break;
+            }
+            else
+              isCollided = false;
+          }
+        } while(isCollided);
+        
+        enemies.push(enemy);
+        ++enemiesOnField;
+      }).play();
+      
+      /* Player movement */
+      $(window).bind('mousemove', function(e) {
+        if(pause)
+          return;
+          
+        var mouse = new Two.Vector(e.clientX, e.clientY);
+        if(mouse.y > 67)
+          player.translation.y = mouse.y;
+      });
+      
+      /* Shot making */
+      $(window).bind('click', function(e) {
+        if(pause)
+          return;
+          
+        var mouse = new Two.Vector(e.clientX, e.clientY);
+        
+        var shot = two.makeCircle(player.translation.x + 50, player.translation.y, 20);
+        shot.fill = '#FF8000';
+        shot.opacity = 0.75;
+        shot.noStroke();
+        
+        shots.push(shot);
+      });
+      
+      $(document).keyup(function(e) {
+        if(e.keyCode == Key.esc) {
+          if(two.playing) {
+            two.pause(); // freeze two.update()
+            pause = true;
+            document.getElementById('bg').pause();
+            $('#status').html('continue');
+          }
+          else {
+            two.play();
+            pause = false;
+            document.getElementById('bg').play();
+            $('#status').html('pause');
+          }
+        }
+        
+        if(e.keyCode == Key.m) {
+          var audio = document.getElementById('bg');
+          if(audio.paused) {
+            audio.play();
+            $('#audio').html('mute');
+          }
+          else {
+            audio.pause();
+            $('#audio').html('unmute');
+          }
+        }
+        
+        e.preventDefault();
+        return false;
+      });
+      
+      window.ondragstart = function() { return false; } // disable object drag
+      
+      two.update();
+    </script>
+    Score: <span id="score">0</span> |
+    Press <em>esc</em> to <span id="status">pause</span> |
+    Press <em>m</em> to <span id="audio">mute</span> |
+    Developed by <em>Roxas Shadow</em>, tested by <em>Andrea Coppola</em>. Made with <em>two.js</em> and so much <em>love</em>.
+  </body>
+</html>
